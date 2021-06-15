@@ -10,4 +10,4 @@ edition = "2018"
 pdb = "0.7"
 getopts = "0.2.21"
 msvc-demangler = "0.8.0"
-
+clap = "2.33.0"

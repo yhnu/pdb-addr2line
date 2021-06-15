@@ -1,10 +1,9 @@
-use std::env;
+use std::{env, process};
 use std::io::Write;
 
-use getopts::Options;
+use clap::{App, Arg};
 use std::collections::BTreeMap;
 use msvc_demangler;
-
 use pdb::{FallibleIterator, SymbolData, PDB, LineProgram, AddressMap};
 
 
@@ -109,6 +108,8 @@ fn print_nearest_symbol(mut symbols: pdb::SymbolIter<'_>, address_map: &pdb::Add
 }
 
 use std::fs::File;
+use std::path::Path;
+
 fn find_symbol(mut pdb: PDB<File>, target: u32) -> pdb::Result<()> {
     let symbol_table = pdb.global_symbols()?;
     let mut address_map = pdb.address_map()?;
@@ -152,15 +153,16 @@ fn dump_pdb(filename: &str, target: u32) -> pdb::Result<()> {
 
     println!("Module private symbols:");
     let dbi = pdb.debug_information()?;
+    println!("{:?}", dbi);
+    
     let ipi = pdb.id_information()?;
 
     let mut modules = dbi.modules()?;
     while let Some(module) = modules.next()? {
-
         let info = match pdb.module_info(&module)? {
             Some(info) => info,
             None => {
-                //println!("  no module info");
+                println!("  no module info");
                 continue;
             }
         };
@@ -255,26 +257,26 @@ fn dump_pdb(filename: &str, target: u32) -> pdb::Result<()> {
 }
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
+    let matches = App::new("addr2line for pdb file")
+        .version("1.0")
+        .author("yiluoyang <buutuud@gmail.com>")
+        .arg(Arg::with_name("input").help("input pdb file").required(true))
+        .arg(Arg::with_name("address").help("address to lookup").multiple(true).required(true))
+        .get_matches();
 
-    let mut opts = Options::new();
-    opts.optflag("h", "help", "print this help menu");
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => panic!(f.to_string()),
-    };
+    let input = matches.value_of("input").unwrap();
+    let input = Path::new(input);
+    if !input.exists() {
+        println!("input file({}) is not exists", input.display());
+        process::exit(-1);
+    }
 
-    let (filename, address) = if matches.free.len() == 2 {
-        (&matches.free[0], &matches.free[1])
-    } else {
-        //print_usage(&program, opts);
-        println!("specify path to a PDB");
-        return;
-    };
-    let address = address.trim_start_matches("0x");
+    let address = matches.value_of("address").unwrap();
+
+    // let address = address.trim_start_matches("0x");
     let address = u32::from_str_radix(address, 16).unwrap();
 
-    match dump_pdb(&filename, address) {
+    match dump_pdb(input.to_str().unwrap(), address) {
         Ok(_) => {}
         Err(e) => {
             writeln!(&mut std::io::stderr(), "error dumping PDB: {}", e).expect("stderr write");
